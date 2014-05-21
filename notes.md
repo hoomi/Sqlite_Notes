@@ -139,3 +139,91 @@ Different transaction types can be used to avoid deadlock situation.
 1. <b>deferred: </b> It does not acquire any locks until it has to. Thus, with a deferred transaction, the begin statement itself does nothing—it starts in the unlocked state. This is the default.
 2. <b>immediate: </b> It attempts to obtain a reserved lock as soon as the begin command is executed. If successful, begin immediate guarantees that no other session will be able to write to the database. Other sessions can continue to read from the database, but the reserved lock prevents any new sessions from reading. Another consequence of the reserved lock is that no other sessions will be able to successfully issue a begin immediate or begin exclusive command.
 3. <b>exclusive: </b>An exclusive transaction obtains an exclusive lock on the database. This works similarly to immediate, but when you successfully issue it, exclusive guarantees that no other session is active in the database and that you can read or write with impunity.
+
+## Attaching Databases
+When you attach a database, all of its contents are accessible in the global scope of the current database file.
+
+	attach [database] filename as database_name;
+	
+	detach [database] database_name;
+	
+## Cleaning Databases
+SQLite has two commands designed for cleaning—reindex and vacuum. reindex is used to rebuild indexes. It has two forms:
+
+	reindex collation_name;
+	reindex table_name|index_name;
+
+- The first form rebuilds all indexes that use the collation name given by collation_name. It is needed only when you change the behavior of a user-defined collating sequence (for example, multiple sort orders in Chinese).
+- <i>Vacuum</i> cleans out any unused space in the database by rebuilding the database file. Vacuum will not work if there are any open transactions. An alternative to manually running VACUUM statements is autovacuum. This feature is enabled using the auto_vacuum pragma, described in the next section.
+
+## Database Configuration
+use pragma before these
+### The Connection Cache Size
+
+	 pragma cache_size; -- Return the cache size of the database
+	 pragma cache_size=10000; -- Set the cache size of the database
+
+You can permanently set the cache size for all sessions using the default_cache_size pragma.
+
+### Getting Database Information
+
+- <i>database_list</i>: Lists information about all attached databases.
+
+- <i>index_info</i>: Lists information about the columns within an index. It takes an index name as an argument.
+	
+		pragma index_info(<index name>);
+
+- <i>index_list</i>: Lists information about the indexes in a table. It takes a table name as an argument.
+
+		pragma index_list(<table_name);
+
+- <i>table_info</i>: Lists information about all columns in a table.
+
+		pragma  table_info(<table name>);
+		
+### Synchronous Writes
+
+Normally, SQLite commits all changes to disk at critical moments to ensure transaction durability. You can turn this off using the following commands
+
+	pragma synchronous [full|normal|off];
+	
+- <b><i>full: </i></b> SQLite will pause at critical moments to make sure that data has actually been written to the disk surface before continuing. This ensures that if the operating system crashes or if there is a power failure, the database will be uncorrupted after rebooting. Full synchronous is very safe, but it is also slow.
+- <b><i>normal: </i></b>SQLite will still pause at the most critical moments but less often than in full mode. There is a very small (though nonzero) chance that a power failure at just the wrong time could corrupt the database in normal mode. But in practice, you are more likely to suffer a catastrophic disk failure or some other unrecoverable hardware fault.
+- <b><i>off: </i></b>SQLite continues operation without pausing as soon as it has handed data off to the operating system. This can speed up some operations as much as 50 or more times. If the application running SQLite crashes, the data will be safe. However, if the operating system crashes or the computer loses power, the database may be corrupted.
+
+### Temporary Storage
+
+Temporary storage is where SQLite keeps transient data such as temporary tables, indexes, and other objects. By default, SQLite uses a compiled-in location, which varies between platforms.
+
+- <i><b>temp_store: </b></i>It determines whether SQLite uses memory or disk for temporary storage. There are actually three possible values: default, file, or memory.
+	- <i>default: </i>uses the compiled-in default
+	- <i>file: </i> uses an operating system file
+	- <i>memory: </i> uses RAM
+- <i><b>temp_store_directory: </b></i>It can be used to set the directory in which the temporary storage file is placed.
+
+### Page Size, Encoding, and Autovacuum
+The database page size, encoding, and autovacuuming must be set before a database is created. That is, to alter the defaults, you must first set these pragmas before creating any database objects in a new database.
+
+SQLite supports page sizes ranging from 512 to 32,786 bytes, in powers of 2. 
+
+Supported encodings are UTF-8, UTF-16le (little-endian UTF-16 encoding), and UTF-16be (big-endian UTF-16 encoding).
+
+A database's size can be automatically kept to a minimum using the auto_vacuum pragma.
+
+## The System Catalog
+The sqlite_master table is a system table that contains information about all the tables, views, indexes, and triggers in the database. 
+
+## View Query Plans
+You can view the way SQLite goes about executing a query by using the 
+		
+		explain query plan <commands>;
+
+The explain query plan command lists the steps SQLite carries out to access and process tables and data to satisfy your query.
+
+You can spot when and how indices are used and the order in which tables are used in joins. This is of immense help when troubleshooting long-running queries and other issues.
+
+
+
+
+
+
