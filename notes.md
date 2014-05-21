@@ -64,6 +64,7 @@ To remove an index, use the drop index command, which is defined as follows:
 	action
 	
 A trigger is defined by a name, an action, and a table. The action, or trigger body, consists of a series of SQL commands. Triggers are said to fire when such events take place. Furthermore, triggers can be made to fire before or after the event using the before or after keyword, respectively. Events include delete, insert, and update commands issued on the specified table. 
+
 ### Update Triggers
 Update triggers, unlike insert and delete triggers, may be defined for specific columns in a table. 
 		
@@ -96,3 +97,45 @@ If you want to test something on a database you could use the follwoing command 
 	begin;
 	<Do the tests>
 	rollback;
+
+## Transactions
+
+- <b>begin:</b> starts a transaction. Every operation following a begin can be potentially undone and will be undone if a commit is not issued before the session terminates.
+- <b>commit:</b> command commits the work performed by all operations since the start of the transaction.
+- <b>rollback:</b> undoes all the work performed by all operations since the start of the transaction.
+- <b>savepoint:</b> It is a point where SQLite can revert to in the event of a rollback. To create a savepoint use the following function:
+	
+		savepoint <name of savepoint>;
+
+In order to revert back to a savepoint use the following command:
+		
+		rollback [transaction] to <name of savepoint>;
+		
+## Conflict Resolution
+
+1. <b>replace: </b> When a unique constraint violation is encountered, SQLite removes the row (or rows) that caused the violation and replaces it (them) with the new row from the insert or update. The SQL operation continues without error. If a NOT NULL constraint violation occurs, the NULL value is replaced by the default value for that column. If the column has no default value, then SQLite applies the abort policy. It is important to note that when this conflict resolution strategy deletes rows in order to satisfy a constraint, it does not invoke delete triggers on those rows. This behavior, however, is subject to change in a future release.
+2. <b>ignore: </b>When a constraint violation is encountered, SQLite allows the command to continue and leaves the row that triggered the violation unchanged. Other rows before and after the row in question continue to be modified by the command. Thus, all rows in the operation that trigger constraint violations are simply left unchanged, and the command proceeds without error.
+3. <b>fail:</b>  When a constraint violation is encountered, SQLite terminates the command but does not restore the changes it made prior to encountering the violation. That is, all changes within the SQL command up to the violation are preserved. For example, if an update statement encountered a constraint violation on the 100th row it attempts to update, then the changes to the first 99 rows already modified remain intact, but changes to rows 100 and beyond never occur as the command is terminated.
+4. <b>abort: </b>When a constraint violation is encountered, SQLite restores all changes the command made and terminates it. abort is the default resolution for all operations in SQLite. It is also the behavior defined in the SQL standard. As a side note, abort is also the most expensive conflict resolution policy—requiring extra work even if no conflicts ever occur.
+5. <b>rollback: </b> When a constraint violation is encountered, SQLite performs a rollback—aborting the current command along with the entire transaction. The net result is that all changes made by the current command and all previous commands in the transaction are rolled back. This is the most drastic level of conflict resolution where a single violation results in a complete reversal of everything performed in a transaction.
+
+		insert or resolution into table (column_list) values (value_list);
+		update or resolution table set (value_list) where predicate;
+		
+## Database Locking
+There are five locking states in sqlite database:
+
+1. <b>unlocked: </b>In this state, no session is accessing data from the database. When you connect to a database or even initiate a transaction with BEGIN, your connection is in the unlocked state.
+2. <b>shared: </b> For a session to read from the database (not write), it must first enter the shared state and must therefore acquire a shared lock. Multiple sessions can simultaneously acquire and hold shared locks at any given time. Therefore, multiple sessions can read from a common database at any given time. However, no session can write to the database during this time—while any shared locks are active.
+3. <b>reserved: </b>If a session wants to write to the database, it must require this lock.Only one reserved lock may be held at one time for a given database. Shared locks can coexist with a reserved lock. A reserved lock is the first phase of writing to a database. It does not block sessions with shared locks from reading, and it does not prevent sessions from acquiring new shared locks. Once a session has a reserved lock, it can begin the process of making modifications; however, these modifications are cached and not actually written to disk. The reader's changes are stored in a memory cache.
+4. <b>pending: </b> To get an exclusive lock, it must first promote its reserved lock to a pending lock. A pending lock starts a process of attrition whereby no new shared locks can be obtained.That is, other sessions with existing shared locks are allowed to continue as normal, but other sessions cannot acquire new shared locks. At this point, the session with the pending lock is waiting for the other sessions with shared locks to finish what they are doing and release them.
+5. <b>exclusive: </b>When the session wants to commit the changes (or transaction) to the database, it begins the process of promoting its reserved lock to an exclusive lock. Once all shared locks are released, the session with the pending lock can promote it to an exclusive lock. It is then free to make changes to the database. All of the previously cached changes are written to the database file.
+
+## Transcation Types
+Different transaction types can be used to avoid deadlock situation.
+
+	begin [ deferred | immediate | exclusive ] transaction;
+	
+1. <b>deferred: </b> It does not acquire any locks until it has to. Thus, with a deferred transaction, the begin statement itself does nothing—it starts in the unlocked state. This is the default.
+2. <b>immediate: </b> It attempts to obtain a reserved lock as soon as the begin command is executed. If successful, begin immediate guarantees that no other session will be able to write to the database. Other sessions can continue to read from the database, but the reserved lock prevents any new sessions from reading. Another consequence of the reserved lock is that no other sessions will be able to successfully issue a begin immediate or begin exclusive command.
+3. <b>exclusive: </b>An exclusive transaction obtains an exclusive lock on the database. This works similarly to immediate, but when you successfully issue it, exclusive guarantees that no other session is active in the database and that you can read or write with impunity.
